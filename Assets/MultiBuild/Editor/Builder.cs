@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using UnityEditor.Build.Reporting;
 
 namespace MultiBuild {
 
@@ -69,7 +70,7 @@ namespace MultiBuild {
                 case 3:
                     // all subsequent args should be targets
                     try {
-                        settings.targets.Add((Target)Enum.Parse(typeof(Target), args[i]));
+                        settings.targets.Add((BuildTarget)Enum.Parse(typeof(BuildTarget), args[i]));
                     } catch (ArgumentException) {
                         throw new ArgumentException(string.Format("Invalid target '{0}'", args[i]));
                     }
@@ -104,16 +105,18 @@ namespace MultiBuild {
                         return false; // cancelled
                 }
 #if UNITY_5_5_OR_NEWER
-                string err = BuildPipeline.BuildPlayer(opts);
+                BuildReport report = BuildPipeline.BuildPlayer(opts);
 #else
-                string err = BuildPipeline.BuildPlayer(
+				BuildReport report = BuildPipeline.BuildPlayer(
                         opts.scenes,
                         opts.locationPathName,
                         opts.target,
                         opts.options);
 #endif
-                if (!string.IsNullOrEmpty(err)) {
-                    throw new InvalidOperationException(string.Format("Build error: {0}", err));
+				BuildSummary summary = report.summary;
+
+				if (summary.result == BuildResult.Failed) {
+                    throw new InvalidOperationException(string.Format("Build error: {0}", summary.ToString()));
                 }
                 ++i;
                 if (callback != null &&
@@ -124,100 +127,52 @@ namespace MultiBuild {
             return true;
         }
 
-        public static BuildTargetGroup GroupForTarget(BuildTarget t) {
+        public static BuildTargetGroup GroupForTarget(BuildTarget t)
+        {
             // Can't believe Unity doesn't have a method for this already
-            switch (t) {
-            case BuildTarget.StandaloneLinux:
-            case BuildTarget.StandaloneLinux64:
-            case BuildTarget.StandaloneLinuxUniversal:
-            case BuildTarget.StandaloneOSX:
-            case BuildTarget.StandaloneWindows:
-            case BuildTarget.StandaloneWindows64:
-                return BuildTargetGroup.Standalone;
-            case BuildTarget.iOS:
-                return BuildTargetGroup.iOS;
-            case BuildTarget.Android:
-                return BuildTargetGroup.Android;
-            case BuildTarget.WebGL:
-                return BuildTargetGroup.WebGL;
-            case BuildTarget.WSAPlayer:
-                return BuildTargetGroup.WSA;
-            case BuildTarget.Tizen:
-                return BuildTargetGroup.Tizen;
-            case BuildTarget.PS4:
-                return BuildTargetGroup.PS4;
-            case BuildTarget.XboxOne:
-                return BuildTargetGroup.XboxOne;
-            case BuildTarget.WiiU:
-                return BuildTargetGroup.WiiU;
-            case BuildTarget.tvOS:
-                return BuildTargetGroup.tvOS;
+            switch (t)
+            {
+                case BuildTarget.StandaloneLinux:
+                case BuildTarget.StandaloneLinux64:
+                case BuildTarget.StandaloneLinuxUniversal:
+                case BuildTarget.StandaloneOSX:
+                case BuildTarget.StandaloneWindows:
+                case BuildTarget.StandaloneWindows64:
+                    return BuildTargetGroup.Standalone;
+                case BuildTarget.iOS:
+                    return BuildTargetGroup.iOS;
+                case BuildTarget.Android:
+                    return BuildTargetGroup.Android;
+                case BuildTarget.WebGL:
+                    return BuildTargetGroup.WebGL;
+                case BuildTarget.WSAPlayer:
+                    return BuildTargetGroup.WSA;
+                case BuildTarget.Tizen:
+                    return BuildTargetGroup.Tizen;
+                case BuildTarget.PS4:
+                    return BuildTargetGroup.PS4;
+                case BuildTarget.XboxOne:
+                    return BuildTargetGroup.XboxOne;
+                case BuildTarget.WiiU:
+                    return BuildTargetGroup.WiiU;
+                case BuildTarget.tvOS:
+                    return BuildTargetGroup.tvOS;
 #if UNITY_5_5_OR_NEWER
-            case BuildTarget.N3DS:
-                return BuildTargetGroup.N3DS;
+                case BuildTarget.N3DS:
+                    return BuildTargetGroup.N3DS;
 #else
             case BuildTarget.Nintendo3DS:
                 return BuildTargetGroup.Nintendo3DS;
 #endif
 #if UNITY_5_6_OR_NEWER
-            case BuildTarget.Switch:
-                return BuildTargetGroup.Switch;
+                case BuildTarget.Switch:
+                    return BuildTargetGroup.Switch;
 #endif
                 // TODO more platforms?
-            default:
-                return BuildTargetGroup.Unknown;
+                default:
+                    return BuildTargetGroup.Unknown;
             }
-        }
-
-        static BuildTarget UnityTarget(Target t) {
-            switch (t) {
-            case Target.Win32:
-                return BuildTarget.StandaloneWindows;
-            case Target.Win64:
-                return BuildTarget.StandaloneWindows64;
-            case Target.Mac:
-            case Target.Mac32:
-                return BuildTarget.StandaloneOSX;
-            case Target.MacUniversal:
-                return BuildTarget.StandaloneOSX;
-            case Target.Linux32:
-                return BuildTarget.StandaloneLinux;
-            case Target.Linux64:
-                return BuildTarget.StandaloneLinux64;
-            case Target.iOS:
-                return BuildTarget.iOS;
-            case Target.Android:
-                return BuildTarget.Android;
-            case Target.WebGL:
-                return BuildTarget.WebGL;
-            case Target.WinStore:
-                return BuildTarget.WSAPlayer;
-            case Target.Tizen:
-                return BuildTarget.Tizen;
-            case Target.PS4:
-                return BuildTarget.PS4;
-            case Target.XboxOne:
-                return BuildTarget.XboxOne;
-            case Target.WiiU:
-                return BuildTarget.WiiU;
-            case Target.tvOS:
-                return BuildTarget.tvOS;
-#if UNITY_5_5_OR_NEWER
-            case Target.Nintendo3DS:
-                return BuildTarget.N3DS;
-#else
-            case Target.Nintendo3DS:
-                return BuildTarget.Nintendo3DS;
-#endif
-#if UNITY_5_6_OR_NEWER
-            case Target.Switch:
-                return BuildTarget.Switch;
-#endif
-                // TODO more platforms?
-            default:
-                throw new NotImplementedException("Target not supported");
-            }
-        }
+        } 
 
         static public List<BuildPlayerOptions> SelectedBuildOptions(Settings settings) {
             var ret = new List<BuildPlayerOptions>();
@@ -227,7 +182,7 @@ namespace MultiBuild {
             return ret;
         }
 
-        static public BuildPlayerOptions BuildOpts(Settings settings, Target target) {
+        static public BuildPlayerOptions BuildOpts(Settings settings, BuildTarget target) {
             BuildPlayerOptions o = new BuildPlayerOptions();
             // Build all the scenes selected in build settings
             o.scenes = EditorBuildSettings.scenes
@@ -243,16 +198,18 @@ namespace MultiBuild {
                 o.locationPathName = Path.Combine(o.locationPathName, settings.overrideName);
             // Need to append exe in Windows, isn't added by default
             // Weirdly .app is added automatically for Mac
-            if (target == Target.Win32 || target == Target.Win64)
+            if (target == BuildTarget.StandaloneWindows64)
                 o.locationPathName += ".exe";
 
-            o.target = UnityTarget(target);
+            o.target = target;
             BuildOptions opts = BuildOptions.None;
             if (settings.developmentBuild)
                 opts |= BuildOptions.Development;
+            if (settings.compress)
+                opts |= BuildOptions.CompressWithLz4HC;
             o.options = opts;
 
-            return o;
+            return o;   
         }
 
     }
